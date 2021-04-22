@@ -1,0 +1,14 @@
+camera_pos: -15 10 -15
+camera_fwd: -1 1 -1
+camera_up: 1 1 1
+
+max_vertices: 4
+max_triangles: 2
+
+vertex: -10 0 -10
+vertex: -10 0 10
+vertex: 10 0 -10
+vertex: 10 0 10
+
+triangle: 0 1 2
+triangle: 1 2 3
