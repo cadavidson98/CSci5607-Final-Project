@@ -3,6 +3,6 @@
 .gitignore
 # vs directories
 .vscode/
-'Visual Studio Files'/
+Visual\ Studio\ Files/
 # executables and build files
 *.exe *.out *.o

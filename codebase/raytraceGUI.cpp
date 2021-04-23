@@ -10,6 +10,7 @@
  #include <SDL.h>
  #include <SDL_opengl.h>
 #endif
+
 #include <cstdio>
 #include <cmath>
 #include <iostream>
@@ -17,26 +18,30 @@
 #include <string>
 #include <ctime>
 #include <thread>
-#include "image_lib.h"
-#include"raytracer.h"
+// PGA is included only for the Cross product and Point3D so calculating face normals can be done easily
+#include "PGA_3D.h"
+#include "structs.h"
 
 using namespace std;
 
-float vertices[] = {  //The function updateVertices() changes these values to match p1,p2,p3,p4
+float vertices[] = {  // This are the verts for the fullscreen quad
 //  X     Y     R     G     B     U    V
-  1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,  // top right
-  1.0f, -1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, // bottom right
-  -1.0f,  1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f,  // top left 
-  -1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f,  // bottom left
+  1.0f,  1.0f, 1.0f, 0.0f,  // top right
+  1.0f, -1.0f, 1.0f, 1.0f, // bottom right
+  -1.0f,  1.0f, 0.0f, 0.0f,  // top left 
+  -1.0f, -1.0f, 0.0f, 1.0f,  // bottom left
 };
 
 //////////////////////////
 ///  Begin your code here
 /////////////////////////
 
+/// These are global variables for controlling
+/// The window status
 bool fullscreen = false;
 bool done = false;
 
+/// This function handles key released events
 void keyReleased(int scancode) {
     if (scancode == SDLK_f) //If "f" is pressed
         fullscreen = !fullscreen;
@@ -44,16 +49,15 @@ void keyReleased(int scancode) {
         done = true; //Exit event loop
 }
 
-// Shader sources
+/// Shader sources
+/// The raytraced image is rendered on a fullscreen quad
+/// which is what these shaders handle
 const GLchar* vertexSource =
    "#version 430 core\n"
    "in vec2 position;"
-   "in vec3 inColor;"
    "in vec2 inTexcoord;"
-   "out vec3 Color;"
    "out vec2 texcoord;"
    "void main() {"
-   "   Color = inColor;"
    "   gl_Position = vec4(position, 0.0, 1.0);"
    "   texcoord = inTexcoord;"
    "}";
@@ -66,7 +70,13 @@ const GLchar* fragmentSource =
    "void main() {"
    "   outColor = texture(tex0, texcoord).xyz;"
    "}";
-    
+
+/**
+ * MaterialGL - this struct represents the material struct
+ * which is defined in the GLSL compute shader. The float
+ * arrays and padding values are to ensure that the materials
+ * are tightly packed on the GPU and align properly within buffers
+ */ 
 struct MaterialGL {
     float ka[3];
     float padding1;
@@ -100,6 +110,12 @@ struct MaterialGL {
     };
 };
 
+/**
+ * TriangleGL - this struct represents the triangle struct
+ * which is defined in the GLSL compute shader. The float arrays and
+ * padding values are to ensure that the materials are tightly packed
+ * on the GPU and align properly within buffers
+ */ 
 struct TriangleGL {
     float p1[3]; // 1 vec3
     float padding1;
@@ -113,31 +129,44 @@ struct TriangleGL {
     float padding5;
     float n3[3]; // 1 vec3
     float padding6;
+    // right now every triangle has a material, I would like to change this
+    // to an offset in a material array, but I'm experiencing alignment issues
+    // when I replace this with an int
     MaterialGL mat;
 };
 
+/**
+ * LightGL - this struct represents the light struct which is defined in the GLSL
+ * compute shader. The float arrays ensure the struct is tightly packed.
+ */ 
 struct LightGL {
     float pos[4];
     float dir[4];
     float clr[4];
     // assume point light,
-    // try adding an int later
+    // try adding a type specifier later
 };
 
-int max_tri = 0;
-MaterialGL* mats = nullptr;
-TriangleGL* tris = nullptr;
-LightGL* lights = nullptr;
-int num_lights = 0;
+/// global values obtained from file reading
+int max_tri = 0;  // the number of triangles in the scenefile
+MaterialGL* mats = nullptr;  // all the materials in the scenefile
+TriangleGL* tris = nullptr;  // all the triangles in the scenefile
+LightGL* lights = nullptr;  // all the lights in the scenefile
+int num_lights = 0;  // the number of lights in the scenefile
 
-size_t width = 1080;
-size_t height = 720;
-float half_fov = 45.0;
-float eye[3] = { 0.0 ,0.0, 0.0 };
-float fwd[3] = { 0.0, 0.0, -1.0 };
-float cam_r[3] = { 1.0, 0.0, 0.0 };
-float up[3] = { 0.0, 1.0, 0.0 };
-float b_clr[3] = { 0.0, 0.0, 0.0 };
+/// This are the camera values
+size_t width = 1080;  // screen width
+size_t height = 720;  // screen height
+float half_fov = 45.0;  // the half angle field of view
+float eye[3] = { 0.0 ,0.0, 0.0 };  // the camera eye position
+float fwd[3] = { 0.0, 0.0, -1.0 };  // the camera forward direction
+float cam_r[3] = { 1.0, 0.0, 0.0 };  // the camera right direction
+float up[3] = { 0.0, 1.0, 0.0 };  // the camera up direction
+float b_clr[3] = { 0.0, 0.0, 0.0 };  // the background color
+
+/**
+ * Load a scenefile and initialize all the data which needs to be sent to the GPU 
+ */ 
 void loadFromFile(string input_file_name) {
     FILE* in_file;
 
@@ -273,6 +302,7 @@ void loadFromFile(string input_file_name) {
         else if (commandstr == "background:") {
             int val = sscanf(arg, "background: %f %f %f", &b_clr[0], &b_clr[1], &b_clr[2]);
         }
+        // TODO - support more than point lights
         else if (commandstr == "point_light:") {
             LightGL light;
             sscanf(arg, "point_light: %f %f %f %f %f %f", &light.clr[0], &light.clr[1], &light.clr[2], &light.pos[0], &light.pos[1], &light.pos[2]);
@@ -317,7 +347,7 @@ int main(int argc, char *argv[]){
    memset(img_data, 1, (size_t)4 * width * height);
    loadFromFile(filename);
    SDL_Init(SDL_INIT_VIDEO);  //Initialize Graphics (for OpenGL)
-
+   // to use compute shaders, we need to use OpenGL version 4.3 or higher
    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
@@ -382,13 +412,16 @@ int main(int argc, char *argv[]){
    glShaderSource(computeShader, 1, &src, NULL);
    glCompileShader(computeShader);
    GLint status;
+
+   // NEW -we need to load, compile, and link the compute shader
    glGetShaderiv(computeShader, GL_COMPILE_STATUS, &status);
    if (!status) {
        char buffer[512];
        glGetShaderInfoLog(computeShader, 512, NULL, buffer);
        printf("Compute Shader Compile Failed. Info:\n\n%s\n", buffer);
    }
-
+   // Unlike vertex and fragment shaders, compute shaders need to be placed in their
+   // own shader program
    rayTracer = glCreateProgram();
    glAttachShader(rayTracer, computeShader);
    glLinkProgram(rayTracer);
@@ -402,7 +435,7 @@ int main(int argc, char *argv[]){
    if (err != GL_NO_ERROR) {
        cout << err << endl;
    }
-
+   // set all the camera uniforms
    float d = (height * .5) / tanf(half_fov * (M_PI / 180.0));
    glUniform1i(glGetUniformLocation(rayTracer, "num_lights"), num_lights);
    glUniform1i(glGetUniformLocation(rayTracer, "num_tris"), max_tri);
@@ -417,20 +450,24 @@ int main(int argc, char *argv[]){
    glUniform3fv(glGetUniformLocation(rayTracer, "right"), 1, cam_r);
    glUniform3fv(glGetUniformLocation(rayTracer, "up"), 1, up);
    // create the triangle buffer
+   // Since we are storing a LOT of triangles, we will use a Shared Storage Buffer object (SSBO)
+   // they can hold lots more than a uniform
    GLuint tri_ssbo, light_ssbo;
    glGenBuffers(1, &tri_ssbo);
    glBindBuffer(GL_SHADER_STORAGE_BUFFER, tri_ssbo);
+   // send triangle data to the GPU
    glBufferData(GL_SHADER_STORAGE_BUFFER, max_tri * sizeof(TriangleGL), tris, GL_STREAM_READ);
    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, tri_ssbo);
+   // unbind the SSBO
    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
    err = glGetError();
    if (err != GL_NO_ERROR) {
-       int val;
        cout << err << endl;
-       cin >> val;
    }
+   // create an SSBO for the lights
    glGenBuffers(1, &light_ssbo);
    glBindBuffer(GL_SHADER_STORAGE_BUFFER, light_ssbo);
+   // upload lights to the GPU
    glBufferData(GL_SHADER_STORAGE_BUFFER, num_lights * sizeof(LightGL), lights, GL_STREAM_READ);
    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, light_ssbo);
    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); // reset the bound buffer
@@ -477,15 +514,11 @@ int main(int argc, char *argv[]){
    glBindBuffer(GL_ARRAY_BUFFER, vbo);
    GLint posAttrib = glGetAttribLocation(shaderProgram, "position");
    //               Attribute, vals/attrib., type, normalized?, stride, offset
-   glVertexAttribPointer(posAttrib, 2, GL_FLOAT, GL_FALSE, 7 * sizeof(float), 0);
+   glVertexAttribPointer(posAttrib, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), 0);
    glEnableVertexAttribArray(posAttrib); //Binds the VBO current GL_ARRAY_BUFFER 
 
-   GLint colAttrib = glGetAttribLocation(shaderProgram, "inColor");
-   glVertexAttribPointer(colAttrib, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)(2 * sizeof(float)));
-   glEnableVertexAttribArray(colAttrib);
-
    GLint texAttrib = glGetAttribLocation(shaderProgram, "inTexcoord");
-   glVertexAttribPointer(texAttrib, 2, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)(5 * sizeof(float)));
+   glVertexAttribPointer(texAttrib, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
    glEnableVertexAttribArray(texAttrib);
    //Event Loop (Loop forever processing each event as fast as possible)
    glUseProgram(rayTracer);
@@ -506,25 +539,32 @@ int main(int argc, char *argv[]){
            if (windowEvent.type == SDL_KEYUP)
                keyReleased(windowEvent.key.keysym.sym);
        }
+       // here I am animating a light by changing the intensity
        t = (t++) % 200;
        float amt = 4 + 8 * .01 * (-.01 * (t - 100) * (t - 100) + 100);
        lights[0].clr[0] = 
        lights[0].clr[1] = 
        lights[0].clr[2] = amt;
-
+       // after changing the light value, I need to resend the data to the GPU
        glBindBuffer(GL_SHADER_STORAGE_BUFFER, light_ssbo);
        glBufferData(GL_SHADER_STORAGE_BUFFER, num_lights * sizeof(LightGL), lights, GL_STREAM_READ);
        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, light_ssbo);
        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); // reset the bound buffer
 
        glUseProgram(rayTracer);
+       // compute shaders work in workgroup, so we need to specify how many groups we want.
+       // In this case, each workgroup works on a 10 x 10 block of pixels, so we need
+       // width / 10 and height / 10 groups (I think, I honestly don't know much about this part)
        glDispatchCompute(width / 10, height / 10, 1);
+       // glMemoryBarrier is basically a mutex. It makes sure the GPU memory is synchronized before
+       // we try to draw the raytraced image. Otherwise we may get a half-rendered image!
        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
        glUseProgram(shaderProgram);
        
        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4); //Draw the two triangles (4 vertices) making up the square
        SDL_GL_SwapWindow(window); //Double buffering
    }
+   // cleanup
    delete[] img_data;
    if (mats != nullptr)
        delete[] mats;
