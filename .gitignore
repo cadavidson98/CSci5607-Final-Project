@@ -1,0 +1,8 @@
+# a Git ignore file so more sneaky files don't get onto the repo
+# this file
+.gitignore
+# vs directories
+.vscode/
+'Visual Studio Files'/
+# executables and build files
+*.exe *.out *.o
