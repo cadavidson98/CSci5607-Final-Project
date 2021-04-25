@@ -21,6 +21,7 @@
 // PGA is included only for the Cross product and Point3D so calculating face normals can be done easily
 #include "PGA_3D.h"
 #include "structs.h"
+#include "bvh.h"
 
 using namespace std;
 
@@ -76,7 +77,8 @@ const GLchar* fragmentSource =
  * which is defined in the GLSL compute shader. The float
  * arrays and padding values are to ensure that the materials
  * are tightly packed on the GPU and align properly within buffers
- */ 
+ */
+/*
 struct MaterialGL {
     float ka[3];
     float padding1;
@@ -109,13 +111,14 @@ struct MaterialGL {
         ior = 1.0f;
     };
 };
-
+*/
 /**
  * TriangleGL - this struct represents the triangle struct
  * which is defined in the GLSL compute shader. The float arrays and
  * padding values are to ensure that the materials are tightly packed
  * on the GPU and align properly within buffers
- */ 
+ */
+/*
 struct TriangleGL {
     float p1[3]; // 1 vec3
     float padding1;
@@ -134,7 +137,7 @@ struct TriangleGL {
     // when I replace this with an int
     MaterialGL mat;
 };
-
+*/
 /**
  * LightGL - this struct represents the light struct which is defined in the GLSL
  * compute shader. The float arrays ensure the struct is tightly packed.
@@ -143,6 +146,7 @@ struct LightGL {
     float pos[4];
     float dir[4];
     float clr[4];
+    int fluff[4];
     // assume point light,
     // try adding a type specifier later
 };
@@ -153,7 +157,7 @@ MaterialGL* mats = nullptr;  // all the materials in the scenefile
 TriangleGL* tris = nullptr;  // all the triangles in the scenefile
 LightGL* lights = nullptr;  // all the lights in the scenefile
 int num_lights = 0;  // the number of lights in the scenefile
-
+bvh scene_bvh;
 /// This are the camera values
 size_t width = 1080;  // screen width
 size_t height = 720;  // screen height
@@ -166,7 +170,7 @@ float b_clr[3] = { 0.0, 0.0, 0.0 };  // the background color
 
 /**
  * Load a scenefile and initialize all the data which needs to be sent to the GPU 
- */ 
+ */
 void loadFromFile(string input_file_name) {
     FILE* in_file;
 
@@ -176,6 +180,7 @@ void loadFromFile(string input_file_name) {
         exit(1);
     }
     // The file was opened, so we are good to parse data now!
+    vector<TriangleGL*> bvh_tris;
     MaterialGL cur_mat;
     // we allow at most 100 materials in the shader
     int num_mats = 1.0;
@@ -279,6 +284,7 @@ void loadFromFile(string input_file_name) {
             memcpy(t.n2, norm, 3 * sizeof(float));
             memcpy(t.n3, norm, 3 * sizeof(float));
             t.mat = cur_mat;
+            bvh_tris.push_back(tris + tindex);
             tris[tindex++] = t;
         }
         else if (commandstr == "normal_triangle:") {
@@ -297,6 +303,7 @@ void loadFromFile(string input_file_name) {
             memcpy(t.n2, norms + n2*3, 3 * sizeof(float));
             memcpy(t.n3, norms + n3*3, 3 * sizeof(float));
             t.mat = cur_mat;
+            bvh_tris.push_back(tris+tindex);
             tris[tindex++] = t;
         }
         else if (commandstr == "background:") {
@@ -332,11 +339,9 @@ void loadFromFile(string input_file_name) {
     up[0] = u.x;
     up[1] = u.y;
     up[2] = u.z;
-    printf("Background Color: %f %f %f\n", b_clr[0], b_clr[1], b_clr[2]);
-    printf("Camera eye: %f %f %f\n", eye[0], eye[1], eye[2]);
-    printf("Camera forward: %f %f %f\n", fwd[0], fwd[1], fwd[2]);
-    printf("Camera right: %f %f %f\n", cam_r[0], cam_r[1], cam_r[2]);
-    printf("Camera up: %f %f %f\n", up[0], up[1], up[2]);
+    
+    // make the BVH
+    scene_bvh = bvh(bvh_tris);
 }
 
 int main(int argc, char *argv[]){
@@ -406,7 +411,8 @@ int main(int argc, char *argv[]){
    GLuint rayTracer, computeShader;
    // Load the compute shader
    ifstream computeFile("..\\..\\rayTrace_compute.glsl");
-   string computeSource((istreambuf_iterator<char>(computeFile)), istreambuf_iterator<char>());;
+   string computeSource((istreambuf_iterator<char>(computeFile)), istreambuf_iterator<char>());
+   //cout << computeSource << endl;
    computeShader = glCreateShader(GL_COMPUTE_SHADER);
    const char* src = computeSource.c_str();
    glShaderSource(computeShader, 1, &src, NULL);
@@ -475,6 +481,24 @@ int main(int argc, char *argv[]){
    if (err != GL_NO_ERROR) {
        cout << err << endl;
    }
+
+   GLuint bvh_ssbo;
+   // create an SSBO for the bvh
+   glGenBuffers(1, &bvh_ssbo);
+   glBindBuffer(GL_SHADER_STORAGE_BUFFER, bvh_ssbo);
+   // upload lights to the GPU
+   int num_nodes;
+   nodeGL* bvh_data = scene_bvh.getCompact(num_nodes);
+   glBufferData(GL_SHADER_STORAGE_BUFFER, num_nodes * sizeof(nodeGL), bvh_data, GL_STREAM_READ);
+   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, bvh_ssbo);
+   glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); // reset the bound buffer
+   err = glGetError();
+   delete[] bvh_data;
+   if (err != GL_NO_ERROR) {
+       cout << err << endl;
+   }
+
+
    //Load the vertex Shader
    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
    glShaderSource(vertexShader, 1, &vertexSource, NULL);

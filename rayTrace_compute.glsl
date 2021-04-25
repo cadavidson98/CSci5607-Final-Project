@@ -34,6 +34,19 @@ struct Light {
     vec3 pos;
     vec3 dir;
     vec3 clr;
+    int type;
+};
+
+struct Dimension {
+  vec3 min_pt;
+  vec3 max_pt;
+};
+
+struct Node {
+  Dimension dim;
+  int l_child;
+  int r_child;
+  int tri_offset;
 };
 
 // these are structs defined for easy organization
@@ -44,6 +57,9 @@ layout(binding = 1, std430) buffer triangles
 };
 layout(binding = 2, std430) buffer light_buf {
     Light lights[];
+};
+layout(binding = 3, std430) buffer bvh_scene {
+    Node nodes[];
 };
 
 // these are for the camera
@@ -65,6 +81,7 @@ uniform float half_height;
 void rayRecurse(in vec3 pos, in vec3 dir, in int depth, out vec4 color);
 void sceneIntersect(in vec3 pos, in vec3 dir, inout HitInfo hit);
 void triangleIntersect(in vec3 pos, in vec3 dir, in Triangle tri, inout HitInfo hit);
+void AABBIntersect(in vec3 pos, in vec3 dir, in Dimension dim, inout HitInfo hit);
 void lightPoint(in vec3 pos, in vec3 dir, in vec3 norm, in Material mat, out vec4 color);
 
 void main () {
@@ -85,12 +102,19 @@ void main () {
     //vec3 ray_dir3 = eye - d * (forward) + (u + 0.5) * (right) + (v - 0.5) * (up);
     //vec3 ray_dir4 = eye - d * (forward) + (u - 0.5) * (right) + (v + 0.5) * (up);
     //vec3 ray_dir5 = eye - d * (forward) + (u + 0.5) * (right) + (v + 0.5) * (up);
-    
+    HitInfo hit;
+    hit.hit = false;
+    hit.time = 1.0 / 0.0;
+    /*AABBIntersect(eye, ray_dir, nodes[59].dim, hit);
+    if(hit.hit) {
+      clr1 = vec4(1,0,0,1);
+    }*/
     rayRecurse(eye, ray_dir, 1, clr1);
     //rayRecurse(eye, ray_dir, 1, clr2);
     //rayRecurse(eye, ray_dir, 1, clr3);
     //rayRecurse(eye, ray_dir, 1, clr4);
     //rayRecurse(eye, ray_dir, 1, clr5);
+
     imageStore(result, id, clr1);
 }
 
@@ -124,20 +148,97 @@ void rayRecurse(in vec3 pos, in vec3 dir, in int depth, out vec4 color) {
   color = clr;
 }
 
+/**
+ * Iteratively traverse the BVH using DFS to find a triangle collision.
+ * Since we don't have any fancy data structures in GLSL, we
+ * shall represent a stack using a finite array. This may seem
+ * like a troublesome idea at first, but recall that DFS has a space complexity
+ * of O(d). Therefore even if we limit the stack to a finite size of 20, we can
+ * support up to 1,048,576 triangles!
+ */
+    
 void sceneIntersect(in vec3 pos, in vec3 dir, inout HitInfo hit) {
+    int index = 0;
+    int stack[20];
+    stack[0] = 0;
     HitInfo cur_hit;
     cur_hit.hit = false;
     cur_hit.time = 1.0 / 0.0;
-    for(int i = 0; i < num_tris; i++) {
-      triangleIntersect(pos, dir, tris[i], cur_hit);
-      if(cur_hit.hit && cur_hit.time < hit.time) {
-        hit.hit = cur_hit.hit;
-        hit.norm = cur_hit.norm;
-        hit.pos = cur_hit.pos;
-        hit.time = cur_hit.time;
-        hit.mat = cur_hit.mat;
+    while(index >= 0) {
+      // pop off the "top" node
+      int cur_node_idx = stack[index];
+      index = index - 1;
+      if(cur_node_idx == -1) {
+        // this is a "null" node
+        continue;
+      }
+      Node cur_node = nodes[cur_node_idx];
+      // Check if the node intersects the ray
+      HitInfo box_hit;
+      box_hit.hit = false;
+      box_hit.time = 1.0 / 0.0;
+      AABBIntersect(pos, dir, cur_node.dim, box_hit);
+      if(!box_hit.hit || box_hit.time > hit.time) {
+        continue;
+      }
+      if(cur_node.l_child == -1 && cur_node.r_child == -1) {
+        // This is a leaf node, so check if the ray intersects the triangle
+        HitInfo tri_hit;
+        tri_hit.time = 1.0/0.0;
+        tri_hit.hit = false;
+        triangleIntersect(pos, dir, tris[cur_node.tri_offset], tri_hit);
+        if(tri_hit.hit) {
+          // this triangle is closest, so keep track of it
+          hit.hit = true;
+          hit.norm = tri_hit.norm;
+          hit.pos = tri_hit.pos;
+          hit.time = tri_hit.time;
+          hit.mat = tri_hit.mat;
+        }
+      }
+      else {
+        // add the child nodes to the stack (right child first then left)
+        index = index + 1;
+        stack[index] = cur_node.r_child;
+        index = index + 1;
+        stack[index] = cur_node.l_child;
       }
     }
+}
+
+/**
+ * Check if the ray (pos, dir) intersects the AABB dim, and store the results in hit
+ */
+void AABBIntersect(in vec3 pos, in vec3 dir, in Dimension dim, inout HitInfo hit) {
+  float tmin = -1.0 / 0.0;
+  float tmax = 1.0 / 0.0;
+  float tx1 = (dim.min_pt.x - pos.x) / dir.x;
+  float tx2 = (dim.max_pt.x - pos.x) / dir.x;
+  tmin = max(tmin, min(tx1, tx2));
+  tmax = min(tmax, max(tx1, tx2));
+
+  float ty1 = (dim.min_pt.y - pos.y) / dir.y;
+  float ty2 = (dim.max_pt.y - pos.y) / dir.y;
+  tmin = max(tmin, min(ty1, ty2));
+  tmax = min(tmax, max(ty1, ty2));
+
+  float tz1 = (dim.min_pt.z - pos.z) / dir.z;
+  float tz2 = (dim.max_pt.z - pos.z) / dir.z;
+  tmin = max(tmin, min(tz1, tz2));
+  tmax = min(tmax, max(tz1, tz2));
+
+  if(tmax > 0 && tmax >= tmin) {
+    if(tmin >= 0) {
+      hit.time = tmin;
+    }
+    else {
+      hit.time = tmax;
+    }
+    hit.hit = true;
+    return;
+  }
+  hit.hit = false;
+  return;
 }
 
 void triangleIntersect(in vec3 pos, in vec3 dir, in Triangle tri, inout HitInfo hit) {
