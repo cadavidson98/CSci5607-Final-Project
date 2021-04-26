@@ -34,7 +34,7 @@ struct Light {
     vec3 pos;
     vec3 dir;
     vec3 clr;
-    int type;
+    ivec3 type;
 };
 
 struct Dimension {
@@ -83,6 +83,7 @@ void sceneIntersect(in vec3 pos, in vec3 dir, inout HitInfo hit);
 void triangleIntersect(in vec3 pos, in vec3 dir, in Triangle tri, inout HitInfo hit);
 void AABBIntersect(in vec3 pos, in vec3 dir, in Dimension dim, inout HitInfo hit);
 void lightPoint(in vec3 pos, in vec3 dir, in vec3 norm, in Material mat, out vec4 color);
+void light(in vec3 pos, in vec3 dir, in vec3 norm, in Material mat, out vec4 color);
 
 void main () {
     ivec2 id = ivec2(gl_GlobalInvocationID.xy);
@@ -129,7 +130,7 @@ void rayRecurse(in vec3 pos, in vec3 dir, in int depth, out vec4 color) {
   sceneIntersect(pos, dir, hit);
   vec4 clr = vec4(background_clr, 1.0);
   if (hit.hit) {
-    lightPoint(hit.pos, dir, hit.norm, hit.mat, clr);
+    light(hit.pos, dir, hit.norm, hit.mat, clr);
     if(hit.mat.ks.x + hit.mat.ks.y + hit.mat.ks.z > 0.0) {
       HitInfo reflect_hit;
       reflect_hit.hit = false;
@@ -139,7 +140,7 @@ void rayRecurse(in vec3 pos, in vec3 dir, in int depth, out vec4 color) {
       vec3 wiggle = hit.pos + .1 * (r);
       sceneIntersect(wiggle, r, reflect_hit);
       if(reflect_hit.hit) {
-        lightPoint(reflect_hit.pos, r, reflect_hit.norm, reflect_hit.mat, reflect_clr);
+        light(reflect_hit.pos, r, reflect_hit.norm, reflect_hit.mat, reflect_clr);
         reflect_clr = vec4(hit.mat.ks * reflect_clr.rgb, 0);
         clr = vec4(reflect_clr.rgb, 1);
       }
@@ -178,7 +179,7 @@ void sceneIntersect(in vec3 pos, in vec3 dir, inout HitInfo hit) {
       box_hit.hit = false;
       box_hit.time = 1.0 / 0.0;
       AABBIntersect(pos, dir, cur_node.dim, box_hit);
-      if(!box_hit.hit || box_hit.time > hit.time) {
+      if(!box_hit.hit /*|| box_hit.time > hit.time*/) {
         continue;
       }
       if(cur_node.l_child == -1 && cur_node.r_child == -1) {
@@ -187,7 +188,7 @@ void sceneIntersect(in vec3 pos, in vec3 dir, inout HitInfo hit) {
         tri_hit.time = 1.0/0.0;
         tri_hit.hit = false;
         triangleIntersect(pos, dir, tris[cur_node.tri_offset], tri_hit);
-        if(tri_hit.hit) {
+        if(tri_hit.hit && tri_hit.time < hit.time) {
           // this triangle is closest, so keep track of it
           hit.hit = true;
           hit.norm = tri_hit.norm;
@@ -307,6 +308,47 @@ void lightPoint(in vec3 pos, in vec3 dir, in vec3 norm, in Material mat, out vec
     float ks = max(0.0, pow(dot(r, to_eye), 5));
     
     vec3 diffuse = 1.0/(dist*dist) * vec3(lights[i].clr.x*mat.kd.x*kd, lights[i].clr.y*mat.kd.y*kd, lights[i].clr.z*mat.kd.z*kd);
+    vec3 specular = vec3(ks*mat.ks.x, ks*mat.ks.y, ks*mat.ks.z);
+    tot_clr = tot_clr+diffuse+specular;
+  }
+  color = vec4(tot_clr, 1);
+}
+
+void light(in vec3 pos, in vec3 dir, in vec3 norm, in Material mat, out vec4 color) {
+  vec3 to_eye = normalize(eye - pos);
+  vec3 ambient = vec3(0.25*mat.ka.x, 0.25*mat.ka.y, 0.25*mat.ka.z);
+  vec3 tot_clr = ambient;
+  for(int i = 0; i < num_lights; i++) {
+    float attenuation = 1.0;
+    float dist = 99999;
+    vec3 to_light = vec3(0.0,0.0,0.0);
+    int type = lights[i].type.x;
+    switch (type){
+      case 0: //point light
+        to_light = (lights[i].pos - pos);
+        dist = to_light.length();
+        attenuation = 1.0/(dist*dist);
+        break;
+      case 1: //directional light
+        to_light = -lights[i].dir;
+        break;
+    }
+    to_light = normalize(to_light);
+    HitInfo shadow_hit;
+    shadow_hit.time = 1.0 / 0.0;
+    shadow_hit.hit = false;
+    vec3 wiggle = vec3(pos.x + 0.1 * to_light.x, pos.y + 0.1 * to_light.y, pos.z + 0.1 * to_light.z);
+    sceneIntersect(wiggle, to_light, shadow_hit);
+    if(shadow_hit.hit && abs(shadow_hit.time) < dist) {
+      continue;
+    }
+    vec3 n = normalize(norm);
+    float dir = dot(n, to_light);
+    vec3 r = normalize(reflect(to_light, n));
+    float kd = max(0.0, dir);
+    float ks = max(0.0, pow(dot(r, to_eye), 5));
+    
+    vec3 diffuse = attenuation * vec3(lights[i].clr.x*mat.kd.x*kd, lights[i].clr.y*mat.kd.y*kd, lights[i].clr.z*mat.kd.z*kd);
     vec3 specular = vec3(ks*mat.ks.x, ks*mat.ks.y, ks*mat.ks.z);
     tot_clr = tot_clr+diffuse+specular;
   }

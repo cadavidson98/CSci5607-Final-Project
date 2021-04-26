@@ -1,21 +1,23 @@
 //HW 0 - Moving Square
 //Starter code for the first homework assignment.
 //This code assumes SDL2 and OpenGL are both properly installed on your system
-
+#include <string>
 #include "glad/glad.h"  //Include order can matter here
 #if defined(__APPLE__) || defined(__linux__)
  #include <SDL2/SDL.h>
  #include <SDL2/SDL_opengl.h>
+ const char* cs_file = "./shaders/rayTrace_compute.glsl";
 #else
  #include <SDL.h>
  #include <SDL_opengl.h>
+ const char* cs_file = "..\\..\\rayTrace_compute.glsl";
 #endif
 
 #include <cstdio>
 #include <cmath>
 #include <iostream>
 #include <fstream>
-#include <string>
+
 #include <ctime>
 #include <thread>
 // PGA is included only for the Cross product and Point3D so calculating face normals can be done easily
@@ -138,18 +140,7 @@ struct TriangleGL {
     MaterialGL mat;
 };
 */
-/**
- * LightGL - this struct represents the light struct which is defined in the GLSL
- * compute shader. The float arrays ensure the struct is tightly packed.
- */ 
-struct LightGL {
-    float pos[4];
-    float dir[4];
-    float clr[4];
-    int fluff[4];
-    // assume point light,
-    // try adding a type specifier later
-};
+
 
 /// global values obtained from file reading
 int max_tri = 0;  // the number of triangles in the scenefile
@@ -313,6 +304,13 @@ void loadFromFile(string input_file_name) {
         else if (commandstr == "point_light:") {
             LightGL light;
             sscanf(arg, "point_light: %f %f %f %f %f %f", &light.clr[0], &light.clr[1], &light.clr[2], &light.pos[0], &light.pos[1], &light.pos[2]);
+            light.type[0] = 0;
+            lights[num_lights++] = light;
+        }
+        else if (commandstr == "directional_light:") {
+            LightGL light;
+            sscanf(arg, "directional_light: %f %f %f %f %f %f", &light.clr[0], &light.clr[1], &light.clr[2], &light.dir[0], &light.dir[1], &light.dir[2]);
+            light.type[0] = 1;
             lights[num_lights++] = light;
         }
         else if (commandstr == "camera_fov_ha:") {
@@ -410,7 +408,7 @@ int main(int argc, char *argv[]){
    //GL_STREAM_DRAW = geom. changes frequently.  This effects which types of GPU memory is used
    GLuint rayTracer, computeShader;
    // Load the compute shader
-   ifstream computeFile("..\\..\\rayTrace_compute.glsl");
+   ifstream computeFile(cs_file);
    string computeSource((istreambuf_iterator<char>(computeFile)), istreambuf_iterator<char>());
    //cout << computeSource << endl;
    computeShader = glCreateShader(GL_COMPUTE_SHADER);
@@ -563,17 +561,17 @@ int main(int argc, char *argv[]){
            if (windowEvent.type == SDL_KEYUP)
                keyReleased(windowEvent.key.keysym.sym);
        }
-       // here I am animating a light by changing the intensity
-       t = (t++) % 200;
-       float amt = 4 + 8 * .01 * (-.01 * (t - 100) * (t - 100) + 100);
-       lights[0].clr[0] = 
-       lights[0].clr[1] = 
-       lights[0].clr[2] = amt;
-       // after changing the light value, I need to resend the data to the GPU
-       glBindBuffer(GL_SHADER_STORAGE_BUFFER, light_ssbo);
-       glBufferData(GL_SHADER_STORAGE_BUFFER, num_lights * sizeof(LightGL), lights, GL_STREAM_READ);
-       glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, light_ssbo);
-       glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); // reset the bound buffer
+    //    // here I am animating a light by changing the intensity
+    //    t = (t++) % 200;
+    //    float amt = 4 + 8 * .01 * (-.01 * (t - 100) * (t - 100) + 100);
+    //    lights[0].clr[0] = 
+    //    lights[0].clr[1] = 
+    //    lights[0].clr[2] = amt;
+    //    // after changing the light value, I need to resend the data to the GPU
+    //    glBindBuffer(GL_SHADER_STORAGE_BUFFER, light_ssbo);
+    //    glBufferData(GL_SHADER_STORAGE_BUFFER, num_lights * sizeof(LightGL), lights, GL_STREAM_READ);
+    //    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, light_ssbo);
+    //    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); // reset the bound buffer
 
        glUseProgram(rayTracer);
        // compute shaders work in workgroup, so we need to specify how many groups we want.

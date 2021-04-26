@@ -74,6 +74,20 @@ struct nodeGL {
     float padding2; // this also needs to pad the struct
 };
 
+/**
+ * LightGL - this struct represents the light struct which is defined in the GLSL
+ * compute shader. The float arrays ensure the struct is tightly packed.
+ */ 
+struct LightGL {
+    float pos[4];
+    float dir[4];
+    float clr[4];
+    int type[4];
+    // int fluff[3];
+    // assume point light,
+    // try adding a type specifier later
+};
+
 struct Dimension {
     float min_x;
     float min_y;
