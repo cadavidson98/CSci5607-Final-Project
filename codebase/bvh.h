@@ -31,7 +31,6 @@ class bvh {
   public:
     bvh() {};
     bvh(vector<TriangleGL*> tris);
-    bool intersect(Point3D p, Dir3D d, Hit& hit);
     nodeGL * getCompact(int & num_nodes);
   private:
     vector<TriangleGL*> triangles_;
@@ -46,8 +45,6 @@ class bvh {
     bool splitSAH(vector<triangle_info> in_tris, vector<triangle_info> &bin_1, vector<triangle_info> &bin_2);
     bool splitMidpoint(vector<triangle_info> in_tris, vector<triangle_info> &bin_1, vector<triangle_info> &bin_2);
     void buildRecurse(int node_offset, vector<triangle_info> tris);
-    bool intersectRecurse(int node_offset, Point3D p, Dir3D d, Hit& hit, float &best_time);
-    bool intersectIterative(Point3D p, Dir3D d, Hit& hit);
     void validate(node * cur_node);
 };
 

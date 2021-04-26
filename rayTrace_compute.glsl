@@ -92,31 +92,15 @@ void main () {
     float v = half_height - (id.y + 0.5);
     vec3 ray_pt = eye - d * (forward) + u * (right) + v * (up);
     
-    vec4 clr1 = vec4(0,0,0,1);
-    vec4 clr2 = vec4(0,0,0,1);
-    vec4 clr3 = vec4(0,0,0,1);
-    vec4 clr4 = vec4(0,0,0,1);
-    vec4 clr5 = vec4(0,0,0,1);
-
+    vec4 clr = vec4(0,0,0,1);
+    
     vec3 ray_dir = (ray_pt - eye);
-    //vec3 ray_dir2 = eye - d * (forward) + (u - 0.5) * (right) + (v - 0.5) * (up);
-    //vec3 ray_dir3 = eye - d * (forward) + (u + 0.5) * (right) + (v - 0.5) * (up);
-    //vec3 ray_dir4 = eye - d * (forward) + (u - 0.5) * (right) + (v + 0.5) * (up);
-    //vec3 ray_dir5 = eye - d * (forward) + (u + 0.5) * (right) + (v + 0.5) * (up);
     HitInfo hit;
     hit.hit = false;
     hit.time = 1.0 / 0.0;
-    /*AABBIntersect(eye, ray_dir, nodes[59].dim, hit);
-    if(hit.hit) {
-      clr1 = vec4(1,0,0,1);
-    }*/
-    rayRecurse(eye, ray_dir, 1, clr1);
-    //rayRecurse(eye, ray_dir, 1, clr2);
-    //rayRecurse(eye, ray_dir, 1, clr3);
-    //rayRecurse(eye, ray_dir, 1, clr4);
-    //rayRecurse(eye, ray_dir, 1, clr5);
-
-    imageStore(result, id, clr1);
+    rayRecurse(eye, ray_dir, 1, clr);
+    
+    imageStore(result, id, clr);
 }
 
 void rayRecurse(in vec3 pos, in vec3 dir, in int depth, out vec4 color) {
@@ -137,12 +121,12 @@ void rayRecurse(in vec3 pos, in vec3 dir, in int depth, out vec4 color) {
       reflect_hit.time = 1.0 / 0.0;
       vec4 reflect_clr = vec4(0,0,0,1);
       vec3 r = normalize(reflect(dir, normalize(hit.norm)));
-      vec3 wiggle = hit.pos + .1 * (r);
+      vec3 wiggle = hit.pos + .001 * (r);
       sceneIntersect(wiggle, r, reflect_hit);
       if(reflect_hit.hit) {
         light(reflect_hit.pos, r, reflect_hit.norm, reflect_hit.mat, reflect_clr);
         reflect_clr = vec4(hit.mat.ks * reflect_clr.rgb, 0);
-        clr = vec4(reflect_clr.rgb, 1);
+        clr = vec4(clr.rgb + reflect_clr.rgb, 1);
       }
     }
   }
@@ -179,7 +163,7 @@ void sceneIntersect(in vec3 pos, in vec3 dir, inout HitInfo hit) {
       box_hit.hit = false;
       box_hit.time = 1.0 / 0.0;
       AABBIntersect(pos, dir, cur_node.dim, box_hit);
-      if(!box_hit.hit /*|| box_hit.time > hit.time*/) {
+      if(!box_hit.hit) {
         continue;
       }
       if(cur_node.l_child == -1 && cur_node.r_child == -1) {

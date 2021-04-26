@@ -3,8 +3,6 @@
 #include <algorithm>
 #include <stack>
 
-#include "collision.h"
-
 using namespace std;
 
 /**
@@ -365,79 +363,4 @@ bool bvh::splitMidpoint(vector<triangle_info> in_tris, vector<triangle_info> &bi
     bin_1 = vector<triangle_info>(in_tris.begin(), in_tris.begin()+half);
     bin_2 = vector<triangle_info>(in_tris.begin()+half, in_tris.end());
     return true;
-}
-/**
- * Check if the ray(p, d) intersects the tree
- */ 
-bool bvh::intersect(Point3D p, Dir3D d, Hit& hit) {
-    float global_i_time = INFINITY;
-    //return intersectIterative(p, d, hit);
-    return intersectRecurse(0, p, d, hit, global_i_time);
-}
-
-/**
- * Check if the ray(p, d) intersects cur_node
- */ 
-bool bvh::intersectRecurse(int node_offset, Point3D p, Dir3D d, Hit& hit, float &best_time) {
-    // Base case - make sure the ray actually hits this box
-    float b_t = INFINITY;
-    if(node_offset == -1 || !AABBIntersect(p, d, bvh_nodes_[node_offset].AABB_, b_t) || b_t > best_time) return false;
-    compressed_node cur_node = bvh_nodes_[node_offset];
-    if(cur_node.l_child_ == -1 && cur_node.r_child_ == -1) {
-        // check all the triangles in the leaf
-        size_t num_tri = cur_node.tri_offsets_.size();
-        bool result = false;
-        Hit tri_hit;
-        for(size_t i = 0; i < num_tri; ++i) {
-            Hit other_hit;
-            result = TriangleIntersect(p, d, *triangles_[cur_node.tri_offsets_[i]], other_hit) || result;
-            tri_hit = (other_hit.t < tri_hit.t) ? other_hit : tri_hit;
-        }
-        hit = tri_hit;
-        best_time = min(best_time, tri_hit.t);
-        return result;
-    }
-    Hit hit1, hit2;
-    
-    bool result1 = intersectRecurse(cur_node.l_child_, p, d, hit1, best_time);
-    bool result2 = intersectRecurse(cur_node.r_child_, p, d, hit2, best_time);
-    if(result1 || result2) {
-        hit = (hit1.t < hit2.t) ? hit1 : hit2;
-        return true;
-    }
-    return false;
-}
-
-bool bvh::intersectIterative(Point3D p, Dir3D d, Hit &hit) {
-    stack<int> nodes;
-    nodes.push(0);
-    float best_t = INFINITY;
-    bool result = false;
-    while(!nodes.empty()) {
-        int cur_node_idx = nodes.top();
-        nodes.pop();
-        float i_t = INFINITY;
-        if(cur_node_idx == -1 || !AABBIntersect(p, d, bvh_nodes_[cur_node_idx].AABB_, i_t) || i_t > best_t) {
-            continue;
-        }
-        compressed_node cur_node = bvh_nodes_[cur_node_idx];
-        if(cur_node.l_child_ == -1 && cur_node.r_child_ == -1) {
-            // check to see if there is a collision
-            size_t num_tri = cur_node.tri_offsets_.size();
-            Hit tri_hit;
-            for(size_t i = 0; i < num_tri; ++i) {
-                Hit other_hit;
-                result = TriangleIntersect(p, d, *triangles_[cur_node.tri_offsets_[i]], other_hit) || result;
-                tri_hit = (other_hit.t < tri_hit.t) ? other_hit : tri_hit;
-            }
-            hit = min(hit, tri_hit);
-            best_t = min(best_t, tri_hit.t);
-        }
-        else {
-            // add child nodes to the stack
-            nodes.push(cur_node.r_child_);
-            nodes.push(cur_node.l_child_);
-        }
-    }
-    return result;
 }
