@@ -324,7 +324,11 @@ bool bvh::splitSAH(vector<triangle_info> in_tris, vector<triangle_info> &bin_1,
 
 bool bvh::splitMidpoint(vector<triangle_info> in_tris, vector<triangle_info> &bin_1,
                         vector<triangle_info> &bin_2) {
-    Dimension d = getExtent(in_tris); 
+    vector<Point3D> centroids;
+    for (size_t i = 0; i < in_tris.size(); ++i) {
+        centroids.push_back(in_tris[i].centroid_);
+    }
+    Dimension d = getExtent(centroids); 
     float thresh;
     float arr[3];
     arr[0] = abs(d.max_x - d.min_x);

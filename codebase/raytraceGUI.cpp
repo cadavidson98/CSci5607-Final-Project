@@ -43,7 +43,7 @@ float vertices[] = {  // This are the verts for the fullscreen quad
 /// The window status
 bool fullscreen = false;
 bool done = false;
-
+bool image_dirty = false;
 /// This function handles key released events
 void keyReleased(int scancode) {
     if (scancode == SDLK_f) //If "f" is pressed
@@ -190,6 +190,9 @@ void loadFromFile(string input_file_name) {
                 printf("ERROR: NUMBER OF VERTICES NOT SPECIFIED. SKIPPING\n");
                 continue;
             }
+            else if (tindex >= max_tri) {
+                continue;
+            }
             int p1, p2, p3;
             TriangleGL t;
             sscanf(arg, "triangle: %d %d %d", &p1, &p2, &p3);
@@ -213,6 +216,9 @@ void loadFromFile(string input_file_name) {
         else if (commandstr == "normal_triangle:") {
             if (max_vert < 0 || max_norm < 0) {
                 printf("ERROR: NUMBER OF VERTICES/NORMALS NOT SPECIFIED. SKIPPING\n");
+                continue;
+            }
+            else if (tindex >= max_tri) {
                 continue;
             }
             int p1, p2, p3, n1, n2, n3;
@@ -504,15 +510,17 @@ int main(int argc, char *argv[]){
     //    glBufferData(GL_SHADER_STORAGE_BUFFER, num_lights * sizeof(LightGL), lights, GL_STREAM_READ);
     //    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, light_ssbo);
     //    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); // reset the bound buffer
-
-       glUseProgram(rayTracer);
-       // compute shaders work in workgroup, so we need to specify how many groups we want.
-       // In this case, each workgroup works on a 10 x 10 block of pixels, so we need
-       // width / 10 and height / 10 groups (I think, I honestly don't know much about this part)
-       glDispatchCompute(width / 10, height / 10, 1);
-       // glMemoryBarrier is basically a mutex. It makes sure the GPU memory is synchronized before
-       // we try to draw the raytraced image. Otherwise we may get a half-rendered image!
-       glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+       if (image_dirty) {
+           glUseProgram(rayTracer);
+           // compute shaders work in workgroup, so we need to specify how many groups we want.
+           // In this case, each workgroup works on a 10 x 10 block of pixels, so we need
+           // width / 10 and height / 10 groups (I think, I honestly don't know much about this part)
+           glDispatchCompute(width / 10, height / 10, 1);
+           // glMemoryBarrier is basically a mutex. It makes sure the GPU memory is synchronized before
+           // we try to draw the raytraced image. Otherwise we may get a half-rendered image!
+           glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+           image_dirty = false;
+       }
        glUseProgram(shaderProgram);
        
        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4); //Draw the two triangles (4 vertices) making up the square
@@ -524,8 +532,6 @@ int main(int argc, char *argv[]){
        delete[] mats;
    if (tris != nullptr)
        delete[] tris;
-   if (mats != nullptr)
-       delete[] mats;
    if (lights != nullptr)
        delete[] lights;
 
