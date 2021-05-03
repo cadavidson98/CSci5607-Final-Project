@@ -101,7 +101,7 @@ float rand01();
 void main () {
     ivec2 id = ivec2(gl_GlobalInvocationID.xy);
     rand_img_pos = int(gl_LocalInvocationIndex);
-    max_img_pos = int(gl_WorkGroupSize.x * gl_NumWorkGroups.x + gl_WorkGroupSize.y * gl_NumWorkGroups.y); 
+    max_img_pos = int(gl_WorkGroupSize.x * gl_NumWorkGroups.x + gl_WorkGroupSize.y * gl_NumWorkGroups.y) - 1;
     // compute pixel offset
     float u = half_width - (id.x + 0.5);
     float v = half_height - (id.y + 0.5);
