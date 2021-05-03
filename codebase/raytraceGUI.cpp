@@ -10,7 +10,7 @@
 #else
  #include <SDL.h>
  #include <SDL_opengl.h>
- const char* cs_file = "..\\..\\rayTrace_compute.glsl";
+
 #endif
 
 #include <cstdio>
@@ -34,23 +34,13 @@ float vertices[] = {  // This are the verts for the fullscreen quad
   -1.0f,  1.0f, 0.0f, 0.0f,  // top left 
   -1.0f, -1.0f, 0.0f, 1.0f,  // bottom left
 };
-
-//////////////////////////
-///  Begin your code here
-/////////////////////////
-
+const char* cs_file = "..\\..\\pathTrace_compute.glsl";
 /// These are global variables for controlling
 /// The window status
 bool fullscreen = false;
 bool done = false;
+bool dragging = false;
 bool image_dirty = false;
-/// This function handles key released events
-void keyReleased(int scancode) {
-    if (scancode == SDLK_f) //If "f" is pressed
-        fullscreen = !fullscreen;
-    if (scancode == SDLK_ESCAPE)
-        done = true; //Exit event loop
-}
 
 /// Shader sources
 /// The raytraced image is rendered on a fullscreen quad
@@ -91,6 +81,43 @@ float cam_r[3] = { 1.0, 0.0, 0.0 };  // the camera right direction
 float up[3] = { 0.0, 1.0, 0.0 };  // the camera up direction
 float b_clr[3] = { 0.0, 0.0, 0.0 };  // the background color
 
+float theta = M_PI / 2;
+float phi = 0;
+float mouse_pos[2] = { 0.0, 0.0 };
+/// This function handles key released events
+void keyReleased(int scancode) {
+    if (scancode == SDLK_f) //If "f" is pressed
+        fullscreen = !fullscreen;
+    if (scancode == SDLK_ESCAPE)
+        done = true; //Exit event loop
+}
+
+void keyHeld(int scancode) {
+    if (scancode == SDLK_UP) {
+        eye[0] += -fwd[0] * .001;
+        eye[1] += -fwd[1] * .001;
+        eye[2] += -fwd[2] * .001;
+        image_dirty = true;
+    }
+    else if (scancode == SDLK_DOWN) {
+        eye[0] += fwd[0] * .001;
+        eye[1] += fwd[1] * .001;
+        eye[2] += fwd[2] * .001;
+        image_dirty = true;
+    }
+    else if (scancode == SDLK_LEFT) {
+        eye[0] += cam_r[0] * .001;
+        eye[1] += cam_r[1] * .001;
+        eye[2] += cam_r[2] * .001;
+        image_dirty = true;
+    }
+    else if (scancode == SDLK_RIGHT) {
+        eye[0] -= cam_r[0] * .001;
+        eye[1] -= cam_r[1] * .001;
+        eye[2] -= cam_r[2] * .001;
+        image_dirty = true;
+    }
+}
 /**
  * Load a scenefile and initialize all the data which needs to be sent to the GPU 
  */
@@ -285,7 +312,12 @@ int main(int argc, char *argv[]){
    string filename;
    cin >> filename;
    float *img_data = new float[(size_t)4*width*height];
+   float* rand_data = new float[(size_t)4 * width * height];
    memset(img_data, 1, (size_t)4 * width * height);
+   memset(rand_data, 0, (size_t)4 * width * height);
+   for (size_t i = 0; i < 4 * width * height; ++i) {
+       rand_data[i] = (rand() % 100) / 99.0;
+   }
    loadFromFile(filename);
    SDL_Init(SDL_INIT_VIDEO);  //Initialize Graphics (for OpenGL)
    // to use compute shaders, we need to use OpenGL version 4.3 or higher
@@ -311,10 +343,10 @@ int main(int argc, char *argv[]){
    }
    //glViewport(0, 0, width, height);
    //// Allocate Texture 0 (Created in Load Image) ///////
-   GLuint texture;
-   glGenTextures(1, &texture);
+   GLuint texture[2];
+   glGenTextures(2, texture);
    glActiveTexture(GL_TEXTURE0);
-   glBindTexture(GL_TEXTURE_2D, texture);
+   glBindTexture(GL_TEXTURE_2D, texture[0]);
 
    //What to do outside 0-1 range
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -324,10 +356,23 @@ int main(int argc, char *argv[]){
    //TODO: TEST your understanding: Try GL_LINEAR instead of GL_NEAREST on the 4x4 test image. What is happening?
 
    //Load the texture into memory
-   glBindTexture(GL_TEXTURE_2D, texture);
-   glBindImageTexture(0, texture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+   glBindTexture(GL_TEXTURE_2D, texture[0]);
+   glBindImageTexture(0, texture[0], 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_FLOAT, img_data);
    glGenerateMipmap(GL_TEXTURE_2D);
+
+   glActiveTexture(GL_TEXTURE1);
+   glBindTexture(GL_TEXTURE_2D, texture[1]);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST); //GL_LINEAR
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST); //GL_LINEAR
+
+
+   //Load the texture into memory
+   glBindTexture(GL_TEXTURE_2D, texture[1]);
+   glBindImageTexture(1, texture[1], 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_FLOAT, rand_data);
    //// End Allocate Texture ///////
 
 
@@ -391,6 +436,13 @@ int main(int argc, char *argv[]){
    glUniform3fv(glGetUniformLocation(rayTracer, "forward"), 1, fwd);
    glUniform3fv(glGetUniformLocation(rayTracer, "right"), 1, cam_r);
    glUniform3fv(glGetUniformLocation(rayTracer, "up"), 1, up);
+
+   GLuint result_loc = glGetUniformLocation(rayTracer, "result");
+   GLuint rand_loc = glGetUniformLocation(rayTracer, "random");
+
+   glUniform1i(result_loc, 0);
+   glUniform1i(rand_loc, 1);
+
    // create the triangle buffer
    // Since we are storing a LOT of triangles, we will use a Shared Storage Buffer object (SSBO)
    // they can hold lots more than a uniform
@@ -498,21 +550,56 @@ int main(int argc, char *argv[]){
                done = true;
            if (windowEvent.type == SDL_KEYUP)
                keyReleased(windowEvent.key.keysym.sym);
+           if (windowEvent.type == SDL_KEYDOWN)
+               keyHeld(windowEvent.key.keysym.sym);
        }
-    //    // here I am animating a light by changing the intensity
-    //    t = (t++) % 200;
-    //    float amt = 4 + 8 * .01 * (-.01 * (t - 100) * (t - 100) + 100);
-    //    lights[0].clr[0] = 
-    //    lights[0].clr[1] = 
-    //    lights[0].clr[2] = amt;
-    //    // after changing the light value, I need to resend the data to the GPU
-    //    glBindBuffer(GL_SHADER_STORAGE_BUFFER, light_ssbo);
-    //    glBufferData(GL_SHADER_STORAGE_BUFFER, num_lights * sizeof(LightGL), lights, GL_STREAM_READ);
-    //    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, light_ssbo);
-    //    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0); // reset the bound buffer
+       int mx, my;
+       if (SDL_GetMouseState(&mx, &my) & SDL_BUTTON(SDL_BUTTON_LEFT)) {
+           if (!dragging) {
+               // mouse click
+               mouse_pos[0] = mx;
+               mouse_pos[1] = my;
+           }
+           else {
+               // mouse drag
+               float cur_pos[2] = { mx, my };
+               float offset[2] = { cur_pos[0] - mouse_pos[0], cur_pos[1] - mouse_pos[1] };
+               memcpy(mouse_pos, cur_pos, 2 * sizeof(float));
+               theta += .005 * offset[0];
+               phi += .005 * offset[1];
+               float dir[3] = { cos(theta) * cos(phi), sin(phi), sin(theta) * cos(phi) };
+               // reorthogonalize the camera basis
+               Dir3D fwd_dir(dir[0], dir[1], dir[2]);
+               fwd_dir = fwd_dir.normalized();
+               Dir3D up_dir = Dir3D(up[0], up[1], up[2]).normalized();
+               Dir3D rgt_dir = cross(up_dir, fwd_dir).normalized();
+               up_dir = cross(fwd_dir, rgt_dir).normalized();
+               float r[3] = { rgt_dir.x, rgt_dir.y, rgt_dir.z };
+               float u[3] = { up_dir.x, up_dir.y, up_dir.z };
+               memcpy(fwd, dir, 3 * sizeof(float));
+               memcpy(cam_r, r, 3 * sizeof(float));
+               memcpy(up, u, 3 * sizeof(float));
+               printf("-------------------\n");
+               printf("Camera fwd: %f %f %f\n", fwd_dir.x, fwd_dir.y, fwd_dir.z);
+               printf("Camera rgt: %f %f %f\n", rgt_dir.x, rgt_dir.y, rgt_dir.z);
+               printf("Camera up: %f %f %f\n", up_dir.x, up_dir.y, up_dir.z);
+               printf("-------------------\n");
+               image_dirty = true;
+           }
+           dragging = true;
+       }
+       else {
+           float cur_pos[2] = { mx, my };
+           memcpy(mouse_pos, cur_pos, 2 * sizeof(float));
+           dragging = false;
+       }
        if (image_dirty) {
            glUseProgram(rayTracer);
-           // compute shaders work in workgroup, so we need to specify how many groups we want.
+           glUniform3fv(glGetUniformLocation(rayTracer, "eye"), 1, eye);
+           glUniform3fv(glGetUniformLocation(rayTracer, "forward"), 1, fwd);
+           glUniform3fv(glGetUniformLocation(rayTracer, "right"), 1, cam_r);
+           glUniform3fv(glGetUniformLocation(rayTracer, "up"), 1, up);
+           // compute shaders work in workgroups, so we need to specify how many groups we want.
            // In this case, each workgroup works on a 10 x 10 block of pixels, so we need
            // width / 10 and height / 10 groups (I think, I honestly don't know much about this part)
            glDispatchCompute(width / 10, height / 10, 1);
@@ -521,8 +608,7 @@ int main(int argc, char *argv[]){
            glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
            image_dirty = false;
        }
-       glUseProgram(shaderProgram);
-       
+       glUseProgram(shaderProgram);   
        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4); //Draw the two triangles (4 vertices) making up the square
        SDL_GL_SwapWindow(window); //Double buffering
    }

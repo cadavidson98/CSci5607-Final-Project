@@ -121,15 +121,15 @@ void rayRecurse(in vec3 pos, in vec3 dir, in int depth, out vec4 color) {
       reflect_hit.time = 1.0 / 0.0;
       vec4 reflect_clr = vec4(0,0,0,1);
       vec3 r = normalize(reflect(dir, normalize(hit.norm)));
-      vec3 wiggle = hit.pos + .001 * (r);
+      vec3 wiggle = hit.pos + .00001 * (r);
       rayRecurse2(wiggle, r, 2, reflect_clr);
       clr = vec4(clr.rgb + hit.mat.ks * reflect_clr.rgb, 1);
-      //sceneIntersect(wiggle, r, reflect_hit);
-      //if(reflect_hit.hit) {
-      //  light(reflect_hit.pos, r, reflect_hit.norm, reflect_hit.mat, reflect_clr);
-      //  reflect_clr = vec4(hit.mat.ks * reflect_clr.rgb, 0);
-      //  clr = vec4(clr.rgb + reflect_clr.rgb, 1);
-      //}
+      // sceneIntersect(wiggle, r, reflect_hit);
+      // if(reflect_hit.hit) {
+      //   light(reflect_hit.pos, r, reflect_hit.norm, reflect_hit.mat, reflect_clr);
+      //   reflect_clr = vec4(hit.mat.ks * reflect_clr.rgb, 0);
+      //   clr = vec4(clr.rgb + reflect_clr.rgb, 1);
+      // }
     }
   }
   color = clr;
@@ -223,6 +223,7 @@ void rayRecurse4(in vec3 pos, in vec3 dir, in int depth, out vec4 color) {
 void rayRecurse5(in vec3 pos, in vec3 dir, in int depth, out vec4 color) {
   color = vec4(0,0,0,1);
 }
+
 /**
  * Iteratively traverse the BVH using DFS to find a triangle collision.
  * Since we don't have any fancy data structures in GLSL, we
@@ -230,8 +231,7 @@ void rayRecurse5(in vec3 pos, in vec3 dir, in int depth, out vec4 color) {
  * like a troublesome idea at first, but recall that DFS has a space complexity
  * of O(d). Therefore even if we limit the stack to a finite size of 20, we can
  * support up to 1,048,576 triangles!
- */
-    
+ */    
 void sceneIntersect(in vec3 pos, in vec3 dir, inout HitInfo hit) {
     int index = 0;
     int stack[20];
