@@ -10,7 +10,7 @@
 #else
  #include <SDL.h>
  #include <SDL_opengl.h>
-const char* cs_file = "..\\..\\pathTrace_compute.glsl";
+const char* cs_file = "..\\..\\pathTrace_compute1.glsl";
 #endif
 
 #include <cstdio>
