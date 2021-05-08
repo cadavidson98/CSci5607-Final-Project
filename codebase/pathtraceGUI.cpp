@@ -317,16 +317,18 @@ void loadFromFile(string input_file_name) {
 
 int main(int argc, char *argv[]){
    //Image image(width, height);
-//    string filename;
-//    cin >> filename;
+   std::string filename;
+    // cin >> filename;
 
     if (argc < 2){
       std::cout << "Usage: ./a.out scenefile\n";
-      return(0);
-   }
-   argv += 1, argc -= 1;
-   std::string filename = argv[0];
-
+      std::cin >> filename;
+      //return(0);
+    }
+    else {
+        argv += 1, argc -= 1;
+        filename = argv[0];
+    }
 
    float *img_data = new float[(size_t)4*width*height];
    float* rand_data = new float[(size_t)4 * width * height];
