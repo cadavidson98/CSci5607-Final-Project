@@ -8,10 +8,12 @@ Final Project - GPU Ray Tracing
 ## Description
 Implement Ray Tracer on GPU with following features:
 - BVH
-- Path Tracing
-- Motion Blur
-- Area Light
-- CSG
+- Shadow
+- Reflection
+- Point Light
+- Directional Light
+- Maximum Ray Depth is 5
+Also Tried to Implement Path Tracer on GPU, it is currently under debugging.
 
 ## How to compile the code
 ```
