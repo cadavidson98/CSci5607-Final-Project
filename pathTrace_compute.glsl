@@ -2,9 +2,8 @@
 #version 430
 #define MAX_T 99999
 #define MIN_T 0.0001
-int MAX_RAND_VALUE = 100;
 
-layout(local_size_x = 10, local_size_y = 10) in;
+layout(local_size_x = 10, local_size_y = 10, local_size_z = 1) in;
 
 struct Material {
     vec3 ka;
@@ -57,7 +56,7 @@ int rand_img_pos;
 int max_img_pos;
 vec4 rands;
 // these are structs defined for easy organization
-layout(binding = 0, rgba32f) uniform image2D result;
+layout(binding = 0, rgba32f) uniform coherent image2D result;
 layout(binding = 4, rgba32f) uniform image2D random;
 layout(binding = 1, std430) buffer triangles
 {
@@ -113,8 +112,9 @@ void main () {
     hit.hit = false;
     hit.time = MAX_T;
     rayRecurse(eye, ray_dir, 1, clr);
-    
-    imageStore(result, id, vec4(clr,1.0));
+    vec4 cur_clr = imageLoad(result, id);
+    cur_clr = vec4(cur_clr.xyz + .001*clr, 1);
+    imageStore(result, id, cur_clr);
 }
 
 //Sample uniform disk, then extrude for cosine weighted hemisphere
@@ -184,14 +184,14 @@ void rayRecurse(in vec3 pos, in vec3 dir, in int depth, out vec3 color) {
       vec3 t2 = normalize(cross(hit.norm,t1)); 
       vec3 dir_indirect = sampleAroundNormalCosine(hit.norm,t1,t2);
       vec3 wiggle = hit.pos + .001 * (dir_indirect);
-      rayRecurse2(hit.pos, dir_indirect, 2, clr_diffuse);
+      rayRecurse2(hit.pos, 10 * dir_indirect, 2, clr_diffuse);
       clr_diffuse = clr_diffuse * hit.mat.kd * diffusive_a;
     }
 
     if (reflective_l>0.0){
       vec3 dir_reflect = normalize(reflect(dir, normalize(hit.norm)));
       vec3 wiggle = hit.pos + .001 * (dir_reflect);
-      rayRecurse2(hit.pos, dir_reflect, 2, clr_reflective);
+      rayRecurse2(hit.pos, 10 * dir_reflect, 2, clr_reflective);
       clr_reflective = clr_reflective * hit.mat.kd * reflective_a;
     }
 
@@ -209,7 +209,7 @@ void rayRecurse(in vec3 pos, in vec3 dir, in int depth, out vec3 color) {
         if (rf_term > 0.0) { //there is refration
             vec3 dir_refract = (-sqrt(rf_term) - ctheta * eta) * n + eta * dir;
             vec3 wiggle = hit.pos + .001 * (dir_refract);
-            rayRecurse2(hit.pos, dir_refract, 2, clr_refractive);
+            rayRecurse2(hit.pos, 10 * dir_refract, 2, clr_refractive);
             clr_refractive = hit.mat.kt * clr_refractive * refractive_a;
         }
     }
@@ -245,14 +245,14 @@ void rayRecurse2(in vec3 pos, in vec3 dir, in int depth, out vec3 color) {
       vec3 t2 = normalize(cross(hit.norm,t1)); 
       vec3 dir_indirect = sampleAroundNormalCosine(hit.norm,t1,t2);
       vec3 wiggle = hit.pos + .001 * (dir_indirect);
-      rayRecurse3(hit.pos, dir_indirect, 2, clr_diffuse);
+      rayRecurse3(hit.pos, 10 * dir_indirect, 2, clr_diffuse);
       clr_diffuse = clr_diffuse * hit.mat.kd * diffusive_a;
     }
 
     if (reflective_l>0.0){
       vec3 dir_reflect = normalize(reflect(dir, normalize(hit.norm)));
       vec3 wiggle = hit.pos + .001 * (dir_reflect);
-      rayRecurse3(hit.pos, dir_reflect, 2, clr_reflective);
+      rayRecurse3(hit.pos, 10 * dir_reflect, 2, clr_reflective);
       clr_reflective = clr_reflective * hit.mat.kd * reflective_a;
     }
 
@@ -270,7 +270,7 @@ void rayRecurse2(in vec3 pos, in vec3 dir, in int depth, out vec3 color) {
         if (rf_term > 0.0) { //there is refration
             vec3 dir_refract = (-sqrt(rf_term) - ctheta * eta) * n + eta * dir;
             vec3 wiggle = hit.pos + .001 * (dir_refract);
-            rayRecurse3(hit.pos, dir_refract, 2, clr_refractive);
+            rayRecurse3(hit.pos, 10 * dir_refract, 2, clr_refractive);
             clr_refractive = hit.mat.kt * clr_refractive * refractive_a;
         }
     }

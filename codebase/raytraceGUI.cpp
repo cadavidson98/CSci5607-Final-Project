@@ -34,7 +34,7 @@ float vertices[] = {  // This are the verts for the fullscreen quad
   -1.0f,  1.0f, 0.0f, 0.0f,  // top left 
   -1.0f, -1.0f, 0.0f, 1.0f,  // bottom left
 };
-const char* cs_file = "..\\..\\pathTrace_compute.glsl";
+const char* cs_file = "..\\..\\rayTrace_compute.glsl";
 /// These are global variables for controlling
 /// The window status
 bool fullscreen = false;
@@ -94,27 +94,27 @@ void keyReleased(int scancode) {
 
 void keyHeld(int scancode) {
     if (scancode == SDLK_UP) {
-        eye[0] += -fwd[0] * .001;
-        eye[1] += -fwd[1] * .001;
-        eye[2] += -fwd[2] * .001;
+        eye[0] += -fwd[0] * .01;
+        eye[1] += -fwd[1] * .01;
+        eye[2] += -fwd[2] * .01;
         image_dirty = true;
     }
     else if (scancode == SDLK_DOWN) {
-        eye[0] += fwd[0] * .001;
-        eye[1] += fwd[1] * .001;
-        eye[2] += fwd[2] * .001;
+        eye[0] += fwd[0] * .01;
+        eye[1] += fwd[1] * .01;
+        eye[2] += fwd[2] * .01;
         image_dirty = true;
     }
     else if (scancode == SDLK_LEFT) {
-        eye[0] += cam_r[0] * .001;
-        eye[1] += cam_r[1] * .001;
-        eye[2] += cam_r[2] * .001;
+        eye[0] += cam_r[0] * .01;
+        eye[1] += cam_r[1] * .01;
+        eye[2] += cam_r[2] * .01;
         image_dirty = true;
     }
     else if (scancode == SDLK_RIGHT) {
-        eye[0] -= cam_r[0] * .001;
-        eye[1] -= cam_r[1] * .001;
-        eye[2] -= cam_r[2] * .001;
+        eye[0] -= cam_r[0] * .01;
+        eye[1] -= cam_r[1] * .01;
+        eye[2] -= cam_r[2] * .01;
         image_dirty = true;
     }
 }
@@ -536,6 +536,7 @@ int main(int argc, char *argv[]){
    glUseProgram(rayTracer);
    auto s = chrono::high_resolution_clock::now();
    glDispatchCompute(width/10, height/10, 1);
+   glFinish();
    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
    auto e = chrono::high_resolution_clock::now();
    auto dur = e - s;

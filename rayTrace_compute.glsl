@@ -122,14 +122,14 @@ void rayRecurse(in vec3 pos, in vec3 dir, in int depth, out vec4 color) {
       vec4 reflect_clr = vec4(0,0,0,1);
       vec3 r = normalize(reflect(dir, normalize(hit.norm)));
       vec3 wiggle = hit.pos + .00001 * (r);
-      rayRecurse2(wiggle, r, 2, reflect_clr);
+      //rayRecurse2(wiggle, r, 2, reflect_clr);
       clr = vec4(clr.rgb + hit.mat.ks * reflect_clr.rgb, 1);
-      // sceneIntersect(wiggle, r, reflect_hit);
-      // if(reflect_hit.hit) {
-      //   light(reflect_hit.pos, r, reflect_hit.norm, reflect_hit.mat, reflect_clr);
-      //   reflect_clr = vec4(hit.mat.ks * reflect_clr.rgb, 0);
-      //   clr = vec4(clr.rgb + reflect_clr.rgb, 1);
-      // }
+      sceneIntersect(wiggle, 10 * r, reflect_hit);
+      if(reflect_hit.hit) {
+        light(reflect_hit.pos, r, reflect_hit.norm, reflect_hit.mat, reflect_clr);
+        reflect_clr = vec4(hit.mat.ks * reflect_clr.rgb, 0);
+        clr = vec4(clr.rgb + reflect_clr.rgb, 1);
+      }
     }
   }
   color = clr;
@@ -412,7 +412,7 @@ void light(in vec3 pos, in vec3 dir, in vec3 norm, in Material mat, out vec4 col
     shadow_hit.time = 1.0 / 0.0;
     shadow_hit.hit = false;
     vec3 wiggle = vec3(pos.x + 0.001 * to_light.x, pos.y + 0.001 * to_light.y, pos.z + 0.001 * to_light.z);
-    sceneIntersect(wiggle, to_light, shadow_hit);
+    sceneIntersect(wiggle, 10 * to_light, shadow_hit);
     if(shadow_hit.hit && shadow_hit.time < dist) {
       // in depth shadow testing
       // get distance from point of origin to shadow hit
