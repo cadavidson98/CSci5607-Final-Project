@@ -13,7 +13,8 @@ Implement Ray Tracer on GPU with following features:
 - Point Light
 - Directional Light
 - Maximum Ray Depth is 5
-Also Tried to Implement Path Tracer on GPU, it is currently under debugging.
+
+#Also Tried to Implement Path Tracer on GPU, it is currently under debugging.
 
 ## How to compile the code
 ```
